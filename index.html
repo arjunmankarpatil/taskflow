@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<title>TaskFlow — Advanced To-Do (PWA)</title>
+
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#0D47A1" />
+<link rel="icon" sizes="192x192" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-512.png" />
+
+<style>
+  :root{
+    --bg:#0b1220; --card:#10192b; --muted:#7b91b6; --fg:#e8f1ff; --brand:#2E7D32;
+    --accent:#0D47A1; --danger:#d32f2f; --warn:#f9a825; --ok:#2e7d32; --shade:#0a1730;
+  }
+  *{ box-sizing:border-box }
+  html,body{height:100%; margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif; color:var(--fg); background:linear-gradient(180deg,#08101e,#0c1528 60%, #0b1220)}
+  .app{ display:grid; grid-template-rows:auto 1fr auto; height:100dvh; }
+  header{
+    display:flex; align-items:center; gap:12px; padding:10px 14px;
+    background:linear-gradient(90deg,#0D47A1,#1565C0 60%, #0D47A1);
+    box-shadow:0 6px 22px rgba(3,10,30,.35);
+  }
+  header h1{ margin:0; font-size:18px; letter-spacing:.4px }
+  header .grow{ flex:1 }
+  header button, .btn{ border:0; border-radius:10px; padding:8px 12px; font-weight:700; cursor:pointer;
+    background:linear-gradient(#fff,#e9f0ff); color:#0a2350; box-shadow:0 4px 12px rgba(0,0,0,.25) }
+  header .ghost{ background:transparent; color:#f2f5ff; border:1px solid rgba(255,255,255,.2) }
+  main{ display:grid; grid-template-columns: 280px 1fr; gap:12px; padding:12px; }
+  aside{
+    background:var(--card); border:1px solid rgba(255,255,255,.06); border-radius:12px; padding:12px;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .panel{ background:var(--card); border:1px solid rgba(255,255,255,.06); border-radius:12px; padding:12px; }
+  .row{ display:flex; gap:8px; align-items:center }
+  .muted{ color:var(--muted) }
+  input, select, textarea{
+    width:100%; background:#0e1a31; color:var(--fg); border:1px solid rgba(255,255,255,.12);
+    border-radius:10px; padding:10px 12px; outline:none;
+  }
+  .kpis{ display:grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap:10px; }
+  .kpi{ background:#0f1b34; border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:10px; text-align:center }
+  .list{ display:flex; flex-direction:column; gap:8px; }
+  .task{
+    display:grid; grid-template-columns:auto 1fr auto; gap:10px; align-items:center; padding:10px;
+    background:linear-gradient(180deg,#0f1a33,#0c172b); border:1px solid rgba(255,255,255,.08); border-radius:10px;
+  }
+  .task[data-priority="High"]{ border-color:#ef5350 }
+  .task[data-priority="Low"] { border-color:#66bb6a }
+  .task.done{ opacity:.6; text-decoration:line-through }
+  .chips{ display:flex; flex-wrap:wrap; gap:6px; }
+  .chip{ padding:2px 8px; border-radius:999px; border:1px solid rgba(255,255,255,.16); font-size:12px; color:#cfe0ff; }
+  .toolbar{ display:flex; gap:6px; flex-wrap:wrap }
+  .toolbar .btn.small{ padding:6px 8px; font-size:12px }
+  footer{ padding:10px 14px; color:#b9c8e8; display:flex; justify-content:space-between; align-items:center }
+  .badge{ background:#0d2b5a; color:#bfe0ff; padding:2px 8px; border-radius:8px; border:1px solid rgba(255,255,255,.12); font-size:12px }
+
+  @media (max-width: 980px){
+    main{ grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>🗂️ TaskFlow</h1>
+    <div class="grow"></div>
+    <span id="userLabel" class="badge">Not signed in</span>
+    <button id="loginBtn" class="ghost">Sign in</button>
+    <button id="logoutBtn" class="ghost" style="display:none">Sign out</button>
+    <button id="installBtn" style="display:none">Install App</button>
+  </header>
+
+  <main>
+    <aside>
+      <div class="panel">
+        <div class="row">
+          <input id="search" placeholder="Search tasks, #tags, @project…" />
+        </div>
+        <div class="row">
+          <select id="filterProject"></select>
+          <select id="filterStatus">
+            <option value="">All</option>
+            <option value="open">Open</option>
+            <option value="done">Completed</option>
+            <option value="overdue">Overdue</option>
+          </select>
+        </div>
+        <div class="row">
+          <select id="filterPriority">
+            <option value="">Any priority</option>
+            <option>High</option>
+            <option>Medium</option>
+            <option>Low</option>
+          </select>
+          <select id="filterDue">
+            <option value="">Any due</option>
+            <option value="today">Due today</option>
+            <option value="week">Due this week</option>
+            <option value="none">No due date</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 style="margin-top:0">New Task</h3>
+        <div class="row"><input id="tTitle" placeholder="Title *" /></div>
+        <div class="row"><textarea id="tNotes" rows="3" placeholder="Notes (Markdown supported*)"></textarea></div>
+        <div class="row">
+          <input id="tTags" placeholder="Tags (comma separated)" />
+          <select id="tPriority">
+            <option>Medium</option><option>High</option><option>Low</option>
+          </select>
+        </div>
+        <div class="row">
+          <input id="tDue" type="date" />
+          <select id="tProject"></select>
+        </div>
+        <div class="row">
+          <button id="addTask" class="btn">➕ Add Task</button>
+          <button id="addProject" class="btn">📁 Add Project</button>
+        </div>
+        <p class="muted" style="margin:.5rem 0 0 0;font-size:12px">*Basic **bold**, _italic_, and line breaks supported in notes.</p>
+      </div>
+
+      <div class="panel">
+        <h3 style="margin:0 0 6px 0">Backup & Sync</h3>
+        <div class="row toolbar">
+          <button id="exportBtn" class="btn small">⬇️ Export JSON</button>
+          <button id="importBtn" class="btn small">⬆️ Import JSON</button>
+          <button id="clearBtn" class="btn small" style="background:linear-gradient(#fff0f0,#ffd9d9); color:#6b0a0a;">🗑 Clear (this user)</button>
+        </div>
+        <p class="muted" style="font-size:12px;margin:.5rem 0 0">Data is stored locally per user using IndexedDB. Sign in to switch users on the same device.</p>
+      </div>
+    </aside>
+
+    <section class="panel">
+      <div class="kpis">
+        <div class="kpi"><div class="muted">Open</div><div id="kOpen" style="font-size:20px">0</div></div>
+        <div class="kpi"><div class="muted">Overdue</div><div id="kDue" style="font-size:20px">0</div></div>
+        <div class="kpi"><div class="muted">Done</div><div id="kDone" style="font-size:20px">0</div></div>
+      </div>
+
+      <div class="row" style="margin:10px 0">
+        <div class="chips" id="activeChips"></div>
+        <div class="grow"></div>
+        <div class="toolbar">
+          <button id="sortDue" class="btn small">Sort by Due</button>
+          <button id="sortPriority" class="btn small">Sort by Priority</button>
+          <button id="sortCreated" class="btn small">Sort by Created</button>
+        </div>
+      </div>
+
+      <div id="taskList" class="list"></div>
+    </section>
+  </main>
+
+  <footer>
+    <span>TaskFlow PWA • Offline • Installable</span>
+    <span class="muted">Tip: type <code>#tag</code>, <code>@project</code>, or <code>!high</code> in search.</span>
+  </footer>
+</div>
+
+<script>
+/* ========= PWA register ========= */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(console.warn);
+  });
+}
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault(); deferredPrompt = e;
+  document.getElementById('installBtn').style.display = 'inline-block';
+});
+document.getElementById('installBtn').addEventListener('click', async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt(); deferredPrompt = null;
+  document.getElementById('installBtn').style.display = 'none';
+});
+
+/* ========= Tiny IndexedDB helper ========= */
+const DB = (()=>{
+  const DB_NAME='taskflow-db', V=1;
+  let db;
+  function open(){ return new Promise((res,rej)=>{
+    const r = indexedDB.open(DB_NAME, V);
+    r.onupgradeneeded = e=>{
+      const d = e.target.result;
+      if(!d.objectStoreNames.contains('users')) d.createObjectStore('users', { keyPath:'id' });
+      if(!d.objectStoreNames.contains('tasks')) { const s = d.createObjectStore('tasks', { keyPath:'id' }); s.createIndex('byUser','user'); s.createIndex('byProject','project'); }
+      if(!d.objectStoreNames.contains('projects')) { const p = d.createObjectStore('projects', { keyPath:'id' }); p.createIndex('byUser','user'); }
+    };
+    r.onsuccess = ()=>{ db=r.result; res(); };
+    r.onerror = ()=>rej(r.error);
+  });}
+  function tx(name,mode='readonly'){ return db.transaction(name, mode).objectStore(name); }
+  const all = (store, idx, key)=> new Promise((res,rej)=>{
+    const s = tx(store), req = idx? s.index(idx).getAll(key) : s.getAll();
+    req.onsuccess = ()=>res(req.result); req.onerror = ()=>rej(req.error);
+  });
+  const get = (store, key)=> new Promise((res,rej)=>{ const r=tx(store).get(key); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); });
+  const put = (store, val)=> new Promise((res,rej)=>{ const r=tx(store,'readwrite').put(val); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); });
+  const del = (store, key)=> new Promise((res,rej)=>{ const r=tx(store,'readwrite').delete(key); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); });
+  return { open, all, get, put, del };
+})();
+
+/* ========= Local login (profiles stored locally) =========
+   - Not for sensitive data. Passwords hashed via SubtleCrypto.
+   - Lets multiple users use the same device/account and separate data.
+*/
+const Auth = (()=>{
+  const userLabel = document.getElementById('userLabel');
+  const loginBtn = document.getElementById('loginBtn');
+  const logoutBtn = document.getElementById('logoutBtn');
+  let currentUser = null;
+
+  async function sha256(txt){
+    const enc = new TextEncoder().encode(txt);
+    const buf = await crypto.subtle.digest('SHA-256', enc);
+    return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
+
+  async function ensureDefaultProject(userId){
+    const allProjects = await DB.all('projects','byUser', userId);
+    if(allProjects.length===0){
+      await DB.put('projects', { id:`p-${crypto.randomUUID()}`, user:userId, name:'Inbox', created:Date.now() });
+    }
+  }
+
+  async function signIn(){
+    const email = prompt('Email (for local profile only):');
+    if(!email) return;
+    const pw = prompt('Password:');
+    if(!pw) return;
+    const id = (await sha256(email.toLowerCase())).slice(0,16);
+    const passHash = await sha256(pw);
+    const exist = await DB.get('users', id);
+    if(exist){
+      if(exist.passHash !== passHash){ alert('Wrong password.'); return; }
+      currentUser = exist;
+    } else {
+      currentUser = { id, email, passHash, created: Date.now(), name: email.split('@')[0] };
+      await DB.put('users', currentUser);
+      await ensureDefaultProject(id);
+    }
+    userLabel.textContent = currentUser.email;
+    loginBtn.style.display = 'none';
+    logoutBtn.style.display = 'inline-block';
+    loadUI();
+  }
+
+  async function signOut(){
+    currentUser = null;
+    userLabel.textContent = 'Not signed in';
+    logoutBtn.style.display = 'none';
+    loginBtn.style.display = 'inline-block';
+    loadUI();
+  }
+
+  loginBtn.addEventListener('click', signIn);
+  logoutBtn.addEventListener('click', signOut);
+
+  function user(){ return currentUser; }
+  return { user, signIn, signOut };
+})();
+
+/* ========= App logic ========= */
+const els = {
+  search: q('#search'), fProject: q('#filterProject'), fStatus: q('#filterStatus'), fPriority: q('#filterPriority'), fDue: q('#filterDue'),
+  tTitle:q('#tTitle'), tNotes:q('#tNotes'), tTags:q('#tTags'), tPriority:q('#tPriority'), tDue:q('#tDue'), tProject:q('#tProject'),
+  addTask:q('#addTask'), addProject:q('#addProject'),
+  list:q('#taskList'),
+  kOpen:q('#kOpen'), kDue:q('#kDue'), kDone:q('#kDone'),
+  chips:q('#activeChips'),
+  sortDue:q('#sortDue'), sortPri:q('#sortPriority'), sortCreated:q('#sortCreated'),
+  exportBtn:q('#exportBtn'), importBtn:q('#importBtn'), clearBtn:q('#clearBtn')
+};
+
+function q(s,root=document){ return root.querySelector(s); }
+function el(tag,props={},...kids){ const e=document.createElement(tag); Object.assign(e,props); kids.forEach(k=>e.append(k)); return e; }
+function fmtDate(d){ const dt = new Date(d); return isNaN(+dt)? '' : dt.toISOString().slice(0,10); }
+function isOverdue(d){ return d && new Date(d).setHours(0,0,0,0) < new Date().setHours(0,0,0,0); }
+
+let sortMode = 'created'; // created|due|priority
+
+async function loadUI(){
+  await DB.open();
+  const user = Auth.user();
+  // Populate projects
+  els.fProject.innerHTML = '<option value="">All projects</option>';
+  els.tProject.innerHTML = '';
+  if(user){
+    const projects = await DB.all('projects','byUser', user.id);
+    for(const p of projects){
+      els.fProject.append(new Option(p.name, p.id));
+      els.tProject.append(new Option(p.name, p.id));
+    }
+  } else {
+    els.fProject.append(new Option('— sign in —',''));
+    els.tProject.append(new Option('Inbox (local)',''));
+  }
+  renderTasks();
+}
+
+async function getTasks(){
+  const user = Auth.user();
+  if(!user) return [];
+  const tasks = (await DB.all('tasks','byUser', user.id)).sort((a,b)=>a.created-b.created);
+  return tasks;
+}
+
+async function addTask(){
+  const user = Auth.user();
+  if(!user) { alert('Please sign in first.'); return; }
+  const title = els.tTitle.value.trim();
+  if(!title){ alert('Please enter a title.'); return; }
+  const t = {
+    id:`t-${crypto.randomUUID()}`, user:user.id,
+    title, notes:els.tNotes.value.trim(),
+    tags: els.tTags.value.split(',').map(s=>s.trim()).filter(Boolean),
+    project: els.tProject.value || (await ensureInbox(user.id)),
+    priority: els.tPriority.value,
+    due: els.tDue.value || '',
+    created: Date.now(),
+    done:false, checklist: []
+  };
+  await DB.put('tasks', t);
+  // Reset
+  els.tTitle.value=''; els.tNotes.value=''; els.tTags.value=''; els.tDue.value='';
+  renderTasks();
+}
+
+async function ensureInbox(userId){
+  const projects = await DB.all('projects','byUser', userId);
+  let inbox = projects.find(p=>p.name==='Inbox');
+  if(!inbox){ inbox = { id:`p-${crypto.randomUUID()}`, user:userId, name:'Inbox', created:Date.now() }; await DB.put('projects', inbox); }
+  // refresh selectors
+  await loadUI();
+  return inbox.id;
+}
+
+async function addProject(){
+  const user = Auth.user(); if(!user){ alert('Sign in first.'); return; }
+  const name = prompt('Project name:'); if(!name) return;
+  await DB.put('projects', { id:`p-${crypto.randomUUID()}`, user:user.id, name, created:Date.now() });
+  loadUI();
+}
+
+function taskMatches(t, qtxt, filters){
+  if(filters.project && t.project !== filters.project) return false;
+  if(filters.priority && t.priority !== filters.priority) return false;
+  if(filters.status){
+    if(filters.status==='open' && t.done) return false;
+    if(filters.status==='done' && !t.done) return false;
+    if(filters.status==='overdue' && !isOverdue(t.due)) return false;
+  }
+  if(filters.due){
+    const today = new Date(); today.setHours(0,0,0,0);
+    const d = t.due ? new Date(t.due) : null;
+    if(filters.due==='today' && (!d || d.setHours(0,0,0,0)!==today.getTime())) return false;
+    if(filters.due==='week'){
+      if(!d) return false;
+      const diff = (d - today)/86400000;
+      if(diff<0 || diff>6) return false;
+    }
+    if(filters.due==='none' && d) return false;
+  }
+  if(!qtxt) return true;
+  const s = qtxt.toLowerCase();
+  if(s.startsWith('#')){ // tag
+    return t.tags.some(tag => ('#'+tag.toLowerCase()).includes(s));
+  }
+  if(s.startsWith('@')){ // project name lookup deferred (handled in chip rendering)
+    return true; // filtered above via project
+  }
+  if(s.startsWith('!')){ // priority
+    return ('!'+t.priority.toLowerCase()).includes(s);
+  }
+  return (t.title+' '+t.notes+' '+t.tags.join(',')).toLowerCase().includes(s);
+}
+
+function renderMarkdown(text){
+  // very tiny markdown: **bold**, _italic_, line breaks
+  return text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/_(.+?)_/g,'<em>$1</em>')
+    .replace(/\n/g,'<br>');
+}
+
+async function renderTasks(){
+  const user = Auth.user();
+  const tasks = await getTasks();
+  const filters = {
+    project: els.fProject.value,
+    status: els.fStatus.value,
+    priority: els.fPriority.value,
+    due: els.fDue.value
+  };
+  const qtxt = els.search.value.trim();
+
+  // chips
+  els.chips.innerHTML = '';
+  if(filters.project){ els.chips.append(el('span',{className:'chip'},'@project')); }
+  if(filters.status){ els.chips.append(el('span',{className:'chip'},filters.status)); }
+  if(filters.priority){ els.chips.append(el('span',{className:'chip'},'!'+filters.priority)); }
+  if(filters.due){ els.chips.append(el('span',{className:'chip'},'due:'+filters.due)); }
+  if(qtxt){ els.chips.append(el('span',{className:'chip'},'“'+qtxt+'”')); }
+
+  let list = tasks.filter(t=>taskMatches(t,qtxt,filters));
+
+  // sorts
+  if(sortMode==='due') list.sort((a,b)=> (a.due||'9999') < (b.due||'9999') ? -1 : 1);
+  else if(sortMode==='priority'){
+    const rank={High:0,Medium:1,Low:2};
+    list.sort((a,b)=> (rank[a.priority]??1)-(rank[b.priority]??1));
+  } else { // created
+    list.sort((a,b)=> b.created - a.created);
+  }
+
+  // KPIs
+  const open = tasks.filter(t=>!t.done).length;
+  const done = tasks.filter(t=>t.done).length;
+  const overdue = tasks.filter(t=>!t.done && isOverdue(t.due)).length;
+  els.kOpen.textContent=open; els.kDone.textContent=done; els.kDue.textContent=overdue;
+
+  // render
+  els.list.innerHTML='';
+  if(!user){ els.list.append(el('div',{className:'muted', style:'padding:12px'}, 'Sign in (local) to create and save tasks.')); return; }
+  if(list.length===0){ els.list.append(el('div',{className:'muted', style:'padding:12px'}, 'No tasks match.')); return; }
+
+  for(const t of list){
+    const item = el('div',{className:'task', draggable:true});
+    item.dataset.priority = t.priority;
+    if(t.done) item.classList.add('done');
+
+    const cb = el('input',{type:'checkbox'}); cb.checked = t.done;
+    cb.addEventListener('change', async ()=>{
+      t.done = cb.checked; await DB.put('tasks', t); renderTasks();
+      if(t.done && t.due && !isOverdue(t.due)) maybeNotify('✅ Task done: '+t.title);
+    });
+
+    const body = el('div');
+    const title = el('div', { innerHTML:`<strong>${t.title}</strong>` });
+    const meta = el('div',{className:'muted', style:'font-size:12px'});
+    const tags = t.tags.map(x=>'#'+x).join(' ');
+    meta.textContent = [
+      t.priority+' priority',
+      t.due?('due '+fmtDate(t.due)): 'no due',
+      tags || ''
+    ].filter(Boolean).join(' • ');
+    const notes = el('div',{className:'muted', style:'font-size:12px', innerHTML: renderMarkdown(t.notes||'')});
+
+    body.append(title, meta, notes);
+
+    const right = el('div',{className:'toolbar'});
+    const edit = el('button',{className:'btn small', textContent:'✏️ Edit'});
+    const del = el('button',{className:'btn small', textContent:'🗑 Delete', style:'background:linear-gradient(#fff0f0,#ffdcdc);color:#7a0d0d'});
+
+    edit.addEventListener('click', ()=> openEditor(t));
+    del.addEventListener('click', async ()=>{
+      if(confirm('Delete this task?')){ await DB.del('tasks', t.id); renderTasks(); }
+    });
+
+    item.append(cb, body, el('div',{}, edit, del));
+
+    // drag for quick project move
+    item.addEventListener('dragstart', ev=>{ ev.dataTransfer.setData('text/plain', t.id); });
+    els.list.append(item);
+  }
+}
+
+// simple editor prompt
+async function openEditor(t){
+  const title = prompt('Title:', t.title); if(!title) return;
+  const notes = prompt('Notes (Markdown):', t.notes||'') ?? '';
+  const tags = prompt('Tags (comma separated):', t.tags.join(',')) ?? '';
+  const due  = prompt('Due (YYYY-MM-DD or blank):', t.due||'') ?? '';
+  const pri  = prompt('Priority (High/Medium/Low):', t.priority) ?? t.priority;
+  Object.assign(t, { title, notes, tags: tags.split(',').map(s=>s.trim()).filter(Boolean), due, priority: pri });
+  await DB.put('tasks', t); renderTasks();
+}
+
+/* ===== Notifications (optional, local) ===== */
+async function maybeNotify(msg){
+  if(!('Notification' in window)) return;
+  if(Notification.permission==='granted'){ new Notification('TaskFlow', { body: msg }); }
+}
+
+/* ===== Event bindings ===== */
+els.addTask.addEventListener('click', addTask);
+els.addProject.addEventListener('click', addProject);
+['keyup','change'].forEach(ev=>{
+  els.search.addEventListener(ev, renderTasks);
+  els.fProject.addEventListener(ev, renderTasks);
+  els.fStatus.addEventListener(ev, renderTasks);
+  els.fPriority.addEventListener(ev, renderTasks);
+  els.fDue.addEventListener(ev, renderTasks);
+});
+els.sortDue.addEventListener('click', ()=>{ sortMode='due'; renderTasks(); });
+els.sortPri.addEventListener('click', ()=>{ sortMode='priority'; renderTasks(); });
+els.sortCreated.addEventListener('click', ()=>{ sortMode='created'; renderTasks(); });
+
+/* ===== Export / Import / Clear ===== */
+els.exportBtn.addEventListener('click', async ()=>{
+  const user = Auth.user(); if(!user) return alert('Sign in first.');
+  const [tasks, projects] = await Promise.all([
+    DB.all('tasks','byUser', user.id),
+    DB.all('projects','byUser', user.id)
+  ]);
+  const data = { exported: Date.now(), user: user.email, tasks, projects, app:'TaskFlow' };
+  const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = `taskflow-${user.email.replace(/[^a-z0-9]/gi,'_')}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+});
+
+els.importBtn.addEventListener('click', async ()=>{
+  const user = Auth.user(); if(!user) return alert('Sign in first.');
+  const inp = document.createElement('input'); inp.type='file'; inp.accept='application/json';
+  inp.onchange = async ()=>{
+    const file = inp.files[0]; if(!file) return;
+    const txt = await file.text();
+    try{
+      const data = JSON.parse(txt);
+      if(!data.tasks || !data.projects) throw new Error('Invalid file');
+      for(const p of data.projects){ await DB.put('projects', { ...p, user: user.id }); }
+      for(const t of data.tasks){ await DB.put('tasks', { ...t, user: user.id }); }
+      renderTasks();
+      alert('Imported!');
+    } catch(e){ alert('Import failed: '+e.message); }
+  };
+  inp.click();
+});
+
+els.clearBtn.addEventListener('click', async ()=>{
+  const user = Auth.user(); if(!user) return;
+  if(!confirm('Delete ALL tasks & projects for this signed-in user on this device?')) return;
+  const tasks = await DB.all('tasks','byUser', user.id);
+  const projects = await DB.all('projects','byUser', user.id);
+  for(const t of tasks) await DB.del('tasks', t.id);
+  for(const p of projects) await DB.del('projects', p.id);
+  renderTasks();
+});
+
+/* ===== Init ===== */
+(async ()=>{
+  await DB.open();
+  // Try reminder permissions lightweight
+  if('Notification' in window && Notification.permission==='default'){
+    // don’t block; ask gently on user action ideally
+  }
+  loadUI();
+})();
+</script>
+</body>
+</html>
